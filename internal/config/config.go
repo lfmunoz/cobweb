@@ -1,111 +1,120 @@
 package config
 
 import (
+	"time"
+
 	// LOGGING
-
-	"fmt"
-
-	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
-	listener "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
-	route "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
-	hcm "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
-	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
-	"github.com/envoyproxy/go-control-plane/pkg/wellknown"
-	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/ptypes"
 	log "github.com/sirupsen/logrus"
+
 	// GO CONTROL PLANE
+	cluster "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
+	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	endpoint "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
+	listener "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
+	tcp_proxy "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/tcp_proxy/v3"
+	"github.com/envoyproxy/go-control-plane/pkg/wellknown"
 )
 
-type Listener struct {
+// ________________________________________________________________________________
+// CONFIGURATION
+// ________________________________________________________________________________
+type Local struct {
 	Name    string
 	Port    uint32
 	Address string
 }
 
-type Cluster struct {
+type Remote struct {
 	Name    string
 	Port    uint32
 	Address string
 }
 
-func BuildListener(lis Listener, cluster Cluster) {
+// ________________________________________________________________________________
+// CLUSTER
+// ________________________________________________________________________________
+func BuildClusterResource(remote Remote) *cluster.Cluster {
 
-	log.Infof("[Creating listener] - %s", lis.Name)
+	hst := &core.Address{Address: &core.Address_SocketAddress{
+		SocketAddress: &core.SocketAddress{
+			Address:  remote.Address,
+			Protocol: core.SocketAddress_TCP,
+			PortSpecifier: &core.SocketAddress_PortValue{
+				PortValue: remote.Port,
+			},
+		},
+	}}
 
-	// REMOTE
-	rte := &route.RouteConfiguration{
-		Name: "local_route",
-		VirtualHosts: []*route.VirtualHost{{
-			Name:    "local_service",
-			Domains: []string{"*"},
-			Routes: []*route.Route{{
-				Match: &route.RouteMatch{
-					PathSpecifier: &route.RouteMatch_Prefix{
-						Prefix: "/",
-					},
-				},
-				Action: &route.Route_Route{
-					Route: &route.RouteAction{
-						ClusterSpecifier: &route.RouteAction_Cluster{
-							Cluster: cluster.Name,
-						},
-						PrefixRewrite: "/robots.txt",
-						HostRewriteSpecifier: &route.RouteAction_HostRewriteLiteral{
-							HostRewriteLiteral: cluster.Address,
-						},
+	cluster := cluster.Cluster{
+		Name:                 remote.Name, // netcat_cluster
+		ConnectTimeout:       ptypes.DurationProto(2 * time.Second),
+		ClusterDiscoveryType: &cluster.Cluster_Type{Type: cluster.Cluster_LOGICAL_DNS},
+		DnsLookupFamily:      cluster.Cluster_V4_ONLY,
+		LbPolicy:             cluster.Cluster_ROUND_ROBIN,
+		LoadAssignment: &endpoint.ClusterLoadAssignment{
+			ClusterName: remote.Name, // netcat_cluster
+			Endpoints: []*endpoint.LocalityLbEndpoints{{
+				LbEndpoints: []*endpoint.LbEndpoint{
+					{
+						HostIdentifier: &endpoint.LbEndpoint_Endpoint{
+							Endpoint: &endpoint.Endpoint{
+								Address: hst,
+							}},
 					},
 				},
 			}},
-		}},
-	}
-	manager := &hcm.HttpConnectionManager{
-		CodecType:  hcm.HttpConnectionManager_AUTO,
-		StatPrefix: "ingress_http",
-		RouteSpecifier: &hcm.HttpConnectionManager_RouteConfig{
-			RouteConfig: rte,
 		},
-		HttpFilters: []*hcm.HttpFilter{{
-			Name: wellknown.Router,
-		}},
 	}
-	pbst, err := ptypes.MarshalAny(manager)
+
+	return &cluster
+}
+
+// ________________________________________________________________________________
+// LISTENER
+// ________________________________________________________________________________
+func BuildListenerResource(lis Local, cluster Remote) *listener.Listener {
+
+	log.Infof("[Creating listener] - %s", lis.Name)
+
+	// https://github.com/envoyproxy/go-control-plane/blob/master/envoy/extensions/filters/network/tcp_proxy/v3/tcp_proxy.pb.go
+	tcp := &tcp_proxy.TcpProxy{
+		StatPrefix: "ingress_http",
+		ClusterSpecifier: &tcp_proxy.TcpProxy_Cluster{
+			Cluster: cluster.Name,
+		},
+	}
+	pbst, err := ptypes.MarshalAny(tcp)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// LOCAL
-	var l = []types.Resource{
-		&listener.Listener{
-			Name: lis.Name,
-			Address: &core.Address{
-				Address: &core.Address_SocketAddress{
-					SocketAddress: &core.SocketAddress{
-						Protocol: core.SocketAddress_TCP,
-						Address:  lis.Address,
-						PortSpecifier: &core.SocketAddress_PortValue{
-							PortValue: lis.Port,
-						},
+	listener := listener.Listener{
+		Name: lis.Name,
+		Address: &core.Address{
+			Address: &core.Address_SocketAddress{
+				SocketAddress: &core.SocketAddress{
+					Protocol: core.SocketAddress_TCP,
+					Address:  lis.Address,
+					PortSpecifier: &core.SocketAddress_PortValue{
+						PortValue: lis.Port,
 					},
 				},
 			},
-			FilterChains: []*listener.FilterChain{{
-				Filters: []*listener.Filter{{
-					Name: wellknown.HTTPConnectionManager,
-					ConfigType: &listener.Filter_TypedConfig{
-						TypedConfig: pbst,
-					},
-				}},
+		},
+		FilterChains: []*listener.FilterChain{{
+			// https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/listener/v3/listener_components.proto#config-listener-v3-filter
+			Filters: []*listener.Filter{{
+				// The name of the filter to instantiate. The name must match a supported filter.
+				//  https://www.envoyproxy.io/docs/envoy/latest/configuration/listeners/network_filters/network_filters#config-network-filters
+				//  https://github.com/envoyproxy/go-control-plane/blob/master/pkg/wellknown/wellknown.go
+				Name: wellknown.TCPProxy,
+				ConfigType: &listener.Filter_TypedConfig{
+					TypedConfig: pbst,
+				},
 			}},
-		}}
-
-	// fmt.Println(l)
-	m := jsonpb.Marshaler{}
-
-	for _, s := range l {
-		// fmt.Println(i, s)
-		result, _ := m.MarshalToString(s)
-		fmt.Println(result)
+		}},
 	}
 
+	return &listener
 }

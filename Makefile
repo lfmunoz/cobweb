@@ -1,25 +1,39 @@
-
 # ________________________________________________________________________________
-# INFO
+# DEVELOPMENT
 # ________________________________________________________________________________
-info:
-	go version
-
-
 .PHONY: run
 
-run: cmd/server/main.go
+run: cmd/server/server.go
 	go run $<
 
 example: cmd/example/example.go
 	go run $<
 
-HOST=localhost
-PORT=3080
+# ________________________________________________________________________________
+# INFO
+# ________________________________________________________________________________
+.PHONY: info
 
-# --resolve <host:port:address> Force resolve of HOST:PORT to ADDRESS
-# --resolve  localhost:3080:127.0.0.1 
-api:
-	curl  -v -H "Host: 0.0.0.0" \
-   		--cacert certs/tls-ca.crt https://localhost:3080/
+info:
+	go version
 
+
+# ________________________________________________________________________________
+# Start Ubuntu on a docker instance 
+# ________________________________________________________________________________
+start: 
+	-docker start envoy
+	# <hostPort>:<containerPort>
+	#  3080 on loclahost will go to 80 inside container
+	-docker run -d -p 3080:80 -p 9901:9901 --name envoy --privileged \
+		-v $(PWD)/:/root/tools \
+		lfmunoz4/bertha:2.0.0
+
+bash:
+	docker exec -it envoy /bin/bash
+
+stop: 
+	-docker stop envo
+
+e1:
+	envoy -c dynamic.yaml
