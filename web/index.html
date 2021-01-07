@@ -1,12 +1,161 @@
-<!DOCTYPE html>
+<!doctype html>
+
 <html lang="en">
+
 <head>
-    <meta charset="utf-8" />
-    <title>HTTP Go Server</title>
+    <meta charset="utf-8">
+
+    <title>Cobweb Control Plane</title>
+    <meta name="description" content="cobweb control plane homepage">
+    <link rel="stylesheet" href="css/style.css">
 </head>
 
-<body id="index" class="home">
-    <h1> Hello World</h1>
+<body>
+    <!-- START OF APP -->
+    <div id="app">
+
+        <x-nav></x-nav>
+
+        <div class="main">
+
+            <button @click="getInstances()">Get Instances</button>
+            <button @click="getProxies()">Get Proxies</button>
+
+            <div class="config">
+                <h3>Configuration</h3>
+
+
+
+            <div>
+                <a @click="toggleConfigTextArea"
+                    style="margin-left: 40px; font-size: .8rem; text-decoration: underline; color: blue;">
+                    [show import: {{configTextAreaShow}} ]
+                </a>
+                <div v-if="configTextAreaShow">
+                    <textarea rows="30" cols="100" v-model="configTextArea"></textarea>
+                    <div>
+                        <button @click="configTextArea=''">Clear</button>
+                        <button @click="">Import</button>
+                    </div>
+                </div>
+
+            </div>
+
+
+
+            </div>
+
+
+            <div class="discovery">
+                <h3>Service Discovery</h3>
+                <button @click="">GET PROFILES</button>
+            </div>
+
+        </div>
+
+
+        <!-- END OF APP -->
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.min.js"
+        integrity="sha256-4iQZ6BVL4qNKlQ27TExEhBN1HFPvAvAMbFavKKosSWQ=" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.19.2/axios.min.js"
+        integrity="sha256-T/f7Sju1ZfNNfBh7skWn0idlCBcI3RwdLSS4/I7NQKQ=" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.6.11/vue.js" type="text/javascript"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vue2-filters/dist/vue2-filters.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.2.4/gsap.min.js"></script>
+
+    <script src="js/xModifiable.js"></script>
+    <script src="js/xNav.js"></script>
+
+    <script>
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Configuration and Constants
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+        //const API_URL = 'http://localhost:8085/api';
+        const API_URL = 'api';
+
+
+        function getObj(path) {
+            return axios({
+                method: 'get',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                url: `${API_URL}/${path}`
+            })
+        }
+
+        function postDeviceConfig(postObj) {
+            return axios({
+                method: 'post',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                url: `${API_URL}/cpe/kvConfig`,
+                data: postObj
+            })
+        }
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Vuejs Main
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        Vue.config.productionTip = false
+        new Vue({
+            el: '#app',
+            mixins: [Vue2Filters.mixin],
+            //-----------------------------------------------------------------------------------
+            // Data
+            //-----------------------------------------------------------------------------------
+            data: {
+                configTextAreaShow: false,
+                configTextArea: "",
+            },
+            //-----------------------------------------------------------------------------------
+            // Methods
+            //-----------------------------------------------------------------------------------
+            methods: {
+
+                //-----------------------------------------------------------------------------------
+                // API
+                //-----------------------------------------------------------------------------------
+                async getInstances() {
+                    const resp = await getObj("instance")
+                    console.log("instance", resp.data)
+                },
+                async getProxies() {
+                    const resp = await getObj("proxy")
+                    console.log("proxy", resp.data)
+                },
+
+                //-----------------------------------------------------------------------------------
+                // HELPER METHODS
+                //-----------------------------------------------------------------------------------
+                toggleConfigTextArea() {
+                    this.configTextAreaShow = !this.configTextAreaShow
+                },
+            },
+            //-----------------------------------------------------------------------------------
+            // COMPUTED
+            //-----------------------------------------------------------------------------------
+            watch: {
+
+            },
+            //-----------------------------------------------------------------------------------
+            // COMPUTED
+            //-----------------------------------------------------------------------------------
+            computed: {
+
+            },
+            //-----------------------------------------------------------------------------------
+            // MOUNTED
+            //-----------------------------------------------------------------------------------
+            mounted() {
+            }
+        });
+
+    </script>
+
 </body>
 
 </html>

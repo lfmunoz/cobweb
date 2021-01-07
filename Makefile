@@ -1,13 +1,19 @@
 # ________________________________________________________________________________
 # DEVELOPMENT
 # ________________________________________________________________________________
-.PHONY: run
+.PHONY: run test unit
 
-run: cmd/server/server.go
+run: cmd/main/main.go
 	go run $<
 
 example: cmd/example/example.go
 	go run $<
+
+test:
+	go test -v ./...
+
+unit:
+	go test ./...
 
 # ________________________________________________________________________________
 # INFO

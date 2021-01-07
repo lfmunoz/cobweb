@@ -1,25 +1,37 @@
-package main
+package envoy
 
 import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"sync"
-	"time"
 
 	discoverygrpc "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
 	cachev3 "github.com/envoyproxy/go-control-plane/pkg/cache/v3"
 	serverv3 "github.com/envoyproxy/go-control-plane/pkg/server/v3"
+	"github.com/lfmunoz/cobweb/internal/instance"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/peer"
 
 	// LOGGING
-	"github.com/lfmunoz/cobweb/internal/config"
 	log "github.com/sirupsen/logrus"
 )
 
-const grpcMaxConcurrentStreams = 1000000
+// ________________________________________________________________________________
+// GLOBAL
+// ________________________________________________________________________________
+type Callbacks struct {
+	Signal   chan struct{}
+	Debug    bool
+	Fetches  int
+	Requests int
+	mu       sync.Mutex
+}
+
+// ________________________________________________________________________________
+// CONFIG
+// ________________________________________________________________________________
+const grpcMaxConcurrentStreams = 1000
 
 var (
 	port uint = 18000
@@ -35,32 +47,49 @@ var (
 // ________________________________________________________________________________
 // callback handlers
 // ________________________________________________________________________________
-
-func pwd() {
-	path, err := os.Getwd()
-	if err != nil {
-		log.Println(err)
-	}
-	fmt.Println(path)
-}
-
 func (cb *Callbacks) Report() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	log.WithFields(log.Fields{"fetches": cb.Fetches, "requests": cb.Requests}).Info("cb.Report()  callbacks")
 }
-func (cb *Callbacks) OnStreamOpen(_ context.Context, id int64, typ string) error {
-	log.Infof("OnStreamOpen %d open for %s", id, typ)
+
+func (cb *Callbacks) OnStreamOpen(ctx context.Context, id int64, typ string) error {
+	p, _ := peer.FromContext(ctx)
+	addr := p.Addr.String()
+
+	result, ok := instance.LoadById(id)
+	if ok {
+		result.Address = addr
+		result.Active = true
+		instance.Save(*result)
+	} else {
+		instance.Save(instance.Instance{Id: id, Address: addr, Active: true})
+	}
+
+	log.Infof("[Envoy]-[OnStreamOpen - %d] - typ=%s addr=%s", id, typ, addr)
 	return nil
 }
+
 func (cb *Callbacks) OnStreamClosed(id int64) {
-	log.Infof("OnStreamClosed %d closed", id)
+	log.Infof("[Envoy]-[OnStreamClosed - %d] - closed", id)
+	instance.DeleteById(id)
 }
+
 func (cb *Callbacks) OnStreamRequest(id int64, r *discoverygrpc.DiscoveryRequest) error {
-	log.Infof("OnStreamRequest %v", r.TypeUrl)
-	log.Infof("OnStreamRequest %v", r.Node.Id)
-	log.Infof("OnStreamRequest %v", r.Node.Cluster)
-	log.Infof("OnStreamRequest %v", r.Node.ListeningAddresses)
+	result, ok := instance.LoadById(id)
+	if !ok {
+		log.Errorf("[Envoy]-[OnStreamRequest - %d] - item not found", id)
+	} else {
+		result.NodeId = r.Node.Id
+		instance.Save(*result)
+	}
+	log.Infof("[Envoy]-[OnStreamRequest - %d] - nodeId=%v addr=%s", id, r.Node.Id, result.Address)
+	// log.Infof("[Envoy] - OnStreamRequest %v", r.TypeUrl)
+	// log.Infof("OnStreamRequest %v", r.Node.Id)
+	// log.Infof("OnStreamRequest %v", r.Node.Cluster)
+	// log.Infof("OnStreamRequest %v", r.Node.ListeningAddresses)
+	// log.Infof("OnStreamRequest %v", r.ResourceNames)
+
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	cb.Requests++
@@ -71,11 +100,12 @@ func (cb *Callbacks) OnStreamRequest(id int64, r *discoverygrpc.DiscoveryRequest
 	return nil
 }
 func (cb *Callbacks) OnStreamResponse(int64, *discoverygrpc.DiscoveryRequest, *discoverygrpc.DiscoveryResponse) {
-	log.Infof("OnStreamResponse...")
+	log.Infof("[Envoy] - OnStreamResponse...")
 	cb.Report()
 }
+
 func (cb *Callbacks) OnFetchRequest(ctx context.Context, req *discoverygrpc.DiscoveryRequest) error {
-	log.Infof("OnFetchRequest...")
+	log.Infof("[Envoy] - OnFetchRequest...")
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	cb.Fetches++
@@ -85,16 +115,9 @@ func (cb *Callbacks) OnFetchRequest(ctx context.Context, req *discoverygrpc.Disc
 	}
 	return nil
 }
-func (cb *Callbacks) OnFetchResponse(*discoverygrpc.DiscoveryRequest, *discoverygrpc.DiscoveryResponse) {
-	log.Infof("OnFetchResponse...")
-}
 
-type Callbacks struct {
-	Signal   chan struct{}
-	Debug    bool
-	Fetches  int
-	Requests int
-	mu       sync.Mutex
+func (cb *Callbacks) OnFetchResponse(*discoverygrpc.DiscoveryRequest, *discoverygrpc.DiscoveryResponse) {
+	log.Infof("[Envoy] - OnFetchResponse...")
 }
 
 // ________________________________________________________________________________
@@ -113,7 +136,7 @@ func RunManagementServer(ctx context.Context, server serverv3.Server, port uint)
 	// register services
 	discoverygrpc.RegisterAggregatedDiscoveryServiceServer(grpcServer, server)
 
-	log.WithFields(log.Fields{"port": port}).Info("[Management Server Listening]")
+	log.WithFields(log.Fields{"port": port}).Info("[Envoy] - gRPC listening ")
 	go func() {
 		if err = grpcServer.Serve(lis); err != nil {
 			log.Error(err)
@@ -124,36 +147,12 @@ func RunManagementServer(ctx context.Context, server serverv3.Server, port uint)
 	grpcServer.GracefulStop()
 }
 
-// ________________________________________________________________________________
-// MAIN
-// ________________________________________________________________________________
-
-func main() {
-	pwd()
-
-	local := config.Local{
-		Name:    "local",
-		Port:    8080,
-		Address: "0.0.0.0",
-	}
-
-	remote := config.Remote{
-		Name:    "google",
-		Port:    80,
-		Address: "google.com",
-	}
-
-	var l = []types.Resource{
-		config.BuildListenerResource(local, remote),
-	}
-	var c = []types.Resource{
-		config.BuildClusterResource(remote),
-	}
+func Start() {
 
 	// A Context carries a deadline, cancelation signal, and request-scoped values
 	// 	across API boundaries.
 	ctx := context.Background()
-	log.Printf("[Starting] - Control Plane Application")
+	log.Infof("[Envoy] - Control Plane Application Initializing...")
 
 	signal := make(chan struct{})
 	cb := &Callbacks{
@@ -169,21 +168,4 @@ func main() {
 	go RunManagementServer(ctx, srv, port)
 
 	<-signal
-
-	log.Infof(">>>>>>>>>>>>>>>>>>> creating snapshot Version " + fmt.Sprint(version))
-
-	nodeId := cache.GetStatusKeys()[0]
-
-	snap := cachev3.NewSnapshot(fmt.Sprint(version), nil, c, nil, l, nil, nil)
-	if err := snap.Consistent(); err != nil {
-		log.Errorf("snapshot inconsistency: %+v\n%+v", snap, err)
-		os.Exit(1)
-	}
-	err := cache.SetSnapshot(nodeId, snap)
-	if err != nil {
-		log.Fatalf("Could not set snapshot %v", err)
-	}
-
-	time.Sleep(600 * time.Second)
-
 }
