@@ -2,21 +2,34 @@ package instance
 
 import (
 	"fmt"
+	"os"
 	"sync"
+
+	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
+	cachev3 "github.com/envoyproxy/go-control-plane/pkg/cache/v3"
+	"github.com/lfmunoz/cobweb/internal/config"
+
+	// LOGGING
+	log "github.com/sirupsen/logrus"
 )
 
 type Instance struct {
-	Id         int64
-	NodeId     string
-	Address    string
-	ServiceIds []string
-	Active     bool
+	Id      int64
+	NodeId  string
+	Address string
+	// ServiceIds []string
+	// Active     bool
+	Version int32
+	Local   config.Local
+	Remote  config.Remote
 }
 
 // var concurrentMap map[string]InstanceInfo
 // var instanceInfoMutex sync.RWMutex
 
 var ConcurrentMap sync.Map
+
+var Cache cachev3.SnapshotCache = cachev3.NewSnapshotCache(true, cachev3.IDHash{}, nil)
 
 // ________________________________________________________________________________
 // Instance endpoints
@@ -71,4 +84,35 @@ func LoadByNodeId(nodeId string) (*Instance, bool) {
 
 func DeleteById(id int64) {
 	ConcurrentMap.Delete(id)
+}
+
+func BuildDefault(id int64, addr string) *Instance {
+	return &Instance{
+		Id:      id,
+		NodeId:  "",
+		Address: addr,
+		Version: 1,
+		Local: config.Local{
+			Name:    "defaultListen",
+			Address: "0.0.0.0",
+			Port:    8080,
+		},
+		Remote: config.Remote{
+			Name:    "defaultProxy",
+			Address: "lfmunoz.com",
+			Port:    80,
+		},
+	}
+}
+
+func SendConfiguration(inst *Instance, l []types.Resource, c []types.Resource) {
+	snap := cachev3.NewSnapshot(fmt.Sprint(inst.Version), nil, c, nil, l, nil, nil)
+	if err := snap.Consistent(); err != nil {
+		log.Errorf("snapshot inconsistency: %+v\n%+v", snap, err)
+		os.Exit(1)
+	}
+	err := Cache.SetSnapshot(inst.NodeId, snap)
+	if err != nil {
+		log.Fatalf("Could not set snapshot %v", err)
+	}
 }

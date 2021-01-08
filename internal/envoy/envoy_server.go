@@ -7,8 +7,10 @@ import (
 	"sync"
 
 	discoverygrpc "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
+	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
 	cachev3 "github.com/envoyproxy/go-control-plane/pkg/cache/v3"
 	serverv3 "github.com/envoyproxy/go-control-plane/pkg/server/v3"
+	"github.com/lfmunoz/cobweb/internal/config"
 	"github.com/lfmunoz/cobweb/internal/instance"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/peer"
@@ -26,7 +28,10 @@ type Callbacks struct {
 	Fetches  int
 	Requests int
 	mu       sync.Mutex
+	Cache    cachev3.SnapshotCache
 }
+
+var tempConnectionMap sync.Map
 
 // ________________________________________________________________________________
 // CONFIG
@@ -60,10 +65,10 @@ func (cb *Callbacks) OnStreamOpen(ctx context.Context, id int64, typ string) err
 	result, ok := instance.LoadById(id)
 	if ok {
 		result.Address = addr
-		result.Active = true
+		// result.Active = true
 		instance.Save(*result)
 	} else {
-		instance.Save(instance.Instance{Id: id, Address: addr, Active: true})
+		instance.Save(*instance.BuildDefault(id, addr))
 	}
 
 	log.Infof("[Envoy]-[OnStreamOpen - %d] - typ=%s addr=%s", id, typ, addr)
@@ -83,12 +88,34 @@ func (cb *Callbacks) OnStreamRequest(id int64, r *discoverygrpc.DiscoveryRequest
 		result.NodeId = r.Node.Id
 		instance.Save(*result)
 	}
-	log.Infof("[Envoy]-[OnStreamRequest - %d] - nodeId=%v addr=%s", id, r.Node.Id, result.Address)
+	log.Infof("[Envoy]-[OnStreamRequest - %d] - nodeId=%v addr=%s cluster=%s",
+		id, r.Node.Id, result.Address, r.Node.Cluster)
 	// log.Infof("[Envoy] - OnStreamRequest %v", r.TypeUrl)
 	// log.Infof("OnStreamRequest %v", r.Node.Id)
 	// log.Infof("OnStreamRequest %v", r.Node.Cluster)
 	// log.Infof("OnStreamRequest %v", r.Node.ListeningAddresses)
 	// log.Infof("OnStreamRequest %v", r.ResourceNames)
+
+	var l = []types.Resource{
+		config.BuildListenerResource(result.Local, result.Remote),
+	}
+	var c = []types.Resource{
+		config.BuildClusterResource(result.Remote),
+	}
+
+	instance.SendConfiguration(result, l, c)
+	/*
+		atomic.AddInt32(&result.Version, 1)
+		snap := cachev3.NewSnapshot(fmt.Sprint(result.Version), nil, c, nil, l, nil, nil)
+		if err := snap.Consistent(); err != nil {
+			log.Errorf("snapshot inconsistency: %+v\n%+v", snap, err)
+			os.Exit(1)
+		}
+		err := cb.Cache.SetSnapshot(result.NodeId, snap)
+		if err != nil {
+			log.Fatalf("Could not set snapshot %v", err)
+		}
+	*/
 
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
@@ -159,10 +186,12 @@ func Start() {
 		Signal:   signal,
 		Fetches:  0,
 		Requests: 0,
+		Cache:    instance.Cache,
+		// Cache:    cachev3.NewSnapshotCache(true, cachev3.IDHash{}, nil),
 	}
-	cache = cachev3.NewSnapshotCache(true, cachev3.IDHash{}, nil)
+	// cache = cachev3.NewSnapshotCache(true, cachev3.IDHash{}, nil)
 
-	srv := serverv3.NewServer(ctx, cache, cb)
+	srv := serverv3.NewServer(ctx, cb.Cache, cb)
 
 	// start the xDS server
 	go RunManagementServer(ctx, srv, port)

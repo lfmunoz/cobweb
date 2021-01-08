@@ -19,7 +19,6 @@
         <div class="main">
 
             <button @click="getInstances()">Get Instances</button>
-            <button @click="getProxies()">Get Proxies</button>
 
             <div class="config">
                 <h3>Configuration</h3>
@@ -48,7 +47,11 @@
 
             <div class="discovery">
                 <h3>Service Discovery</h3>
-                <button @click="">GET PROFILES</button>
+
+                <div v-for="(item,i) in instances" :key="i">
+                    <x-instance v-model="instances[i]" @save="saveInstance"> </x-instance>
+                </div>
+
             </div>
 
         </div>
@@ -66,6 +69,10 @@
 
     <script src="js/xModifiable.js"></script>
     <script src="js/xNav.js"></script>
+    <script src="js/xInstance.js"></script>
+
+
+    
 
     <script>
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -75,6 +82,46 @@
         //const API_URL = 'http://localhost:8085/api';
         const API_URL = 'api';
 
+        function isObject(obj) {
+            if( typeof obj === 'object' && obj !== null) return true
+            return false
+        }
+        function castObjectFieldsToString(obj) {
+            let result = {}
+            for (const [key, value] of Object.entries(obj)) {
+                if(isObject(value)) {
+                    result[key] = castObjectFieldsToString(value)
+                } else {
+                    result[key] = String(value)
+                }
+            }
+            return result
+        }
+
+        function castFieldsToString(arr) {
+            return arr.map( item => {
+                return castObjectFieldsToString(item)
+            })
+        }
+
+        function castInstanceStringToInstanceNumbers(obj) {
+            return {
+                Address: obj.Address,
+                Id: parseInt(obj.Id),
+                Local: {
+                    Name: obj.Local.Name,
+                    Port: parseInt(obj.Local.Port),
+                    Address: obj.Local.Address
+                },
+                Remote: {
+                    Name: obj.Remote.Name,
+                    Port: parseInt(obj.Remote.Port),
+                    Address: obj.Remote.Address
+                },
+                NodeId: obj.NodeId,
+                Version: parseInt(obj.Version)
+            }
+        }
 
         function getObj(path) {
             return axios({
@@ -86,14 +133,15 @@
             })
         }
 
-        function postDeviceConfig(postObj) {
+        function postInstanceConfig(postObj) {
+            const obj = castInstanceStringToInstanceNumbers(postObj)
             return axios({
                 method: 'post',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                url: `${API_URL}/cpe/kvConfig`,
-                data: postObj
+                url: `${API_URL}/saveInstance`,
+                data: obj
             })
         }
 
@@ -110,22 +158,37 @@
             data: {
                 configTextAreaShow: false,
                 configTextArea: "",
+
+                // fields must all be string
+                instances: []
             },
             //-----------------------------------------------------------------------------------
             // Methods
             //-----------------------------------------------------------------------------------
             methods: {
-
                 //-----------------------------------------------------------------------------------
                 // API
                 //-----------------------------------------------------------------------------------
                 async getInstances() {
                     const resp = await getObj("instance")
                     console.log("instance", resp.data)
+                    this.instances = []
+                    Vue.nextTick( () =>  {
+                    const arr = castFieldsToString(resp.data)
+                        for(let i = 0; i < arr.length; i++) {
+                            Vue.set(this.instances, i, arr[i])
+                        }
+                    })
                 },
+
                 async getProxies() {
                     const resp = await getObj("proxy")
                     console.log("proxy", resp.data)
+                },
+
+                async saveInstance(obj) {
+                    postInstanceConfig(obj)
+                    this.getInstances()
                 },
 
                 //-----------------------------------------------------------------------------------
@@ -151,6 +214,7 @@
             // MOUNTED
             //-----------------------------------------------------------------------------------
             mounted() {
+                this.getInstances()
             }
         });
 

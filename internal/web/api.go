@@ -7,6 +7,9 @@ import (
 	"net/http"
 
 	// LOGGING
+
+	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
+	"github.com/lfmunoz/cobweb/internal/config"
 	"github.com/lfmunoz/cobweb/internal/instance"
 	"github.com/lfmunoz/cobweb/internal/proxy"
 	log "github.com/sirupsen/logrus"
@@ -68,6 +71,34 @@ func getInstances(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func saveInstance(w http.ResponseWriter, r *http.Request) {
+	var obj instance.Instance
+	err := decodeJSONBody(w, r, &obj)
+	if err != nil {
+		var mr *malformedRequest
+		if errors.As(err, &mr) {
+			http.Error(w, mr.msg, mr.status)
+		} else {
+			log.Println(err.Error())
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	before, _ := instance.LoadById(obj.Id)
+	obj.Version = before.Version + 1
+	log.Infof("[HTTP] - Before: %v ", before)
+	log.Infof("[HTTP] - After: %v ", obj)
+	var l = []types.Resource{
+		config.BuildListenerResource(obj.Local, obj.Remote),
+	}
+	var c = []types.Resource{
+		config.BuildClusterResource(obj.Remote),
+	}
+	instance.SendConfiguration(&obj, l, c)
+	instance.Save(obj)
+}
+
 // ________________________________________________________________________________
 // PROXY
 // ________________________________________________________________________________
@@ -122,6 +153,7 @@ func Start() {
 	log.WithFields(log.Fields{"port": httpPort}).Info("[HTTP] - http listening ")
 	// INSTANCE
 	http.HandleFunc("/api/instance", getInstances)
+	http.HandleFunc("/api/saveInstance", saveInstance)
 
 	// PROXY
 	http.HandleFunc("/api/proxy", getProxies)
