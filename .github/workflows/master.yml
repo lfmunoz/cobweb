@@ -1,0 +1,39 @@
+
+name: MASTER_BUILD
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-go@v2
+      with:
+        go-version: '1.15.5' # The Go version to download (if necessary) and use.
+    - run: go version
+    - name: show environment
+      run: |
+        ls -l
+        echo GITHUB_RUN_ID=$GITHUB_RUN_ID
+        echo GITHUB_RUN_NUMBER=$GITHUB_RUN_NUMBER
+        echo GITHUB_EVENT_NAME=$GITHUB_EVENT_NAME
+        echo VERSION=$VERSION
+        make info
+    - name: docker login
+      env:
+        DOCKER_USERNAME: ${{secrets.DOCKER_USERNAME}}
+        DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}
+      run: |
+        echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
+    - name: build
+      run: |
+        make package
+    - name: docker deploy
+      run: |
+        make deploy

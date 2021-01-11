@@ -16,6 +16,39 @@ unit:
 	go test ./...
 
 # ________________________________________________________________________________
+# PRODUCTION
+# ________________________________________________________________________________
+.PHONY: clean docker
+COBWEB_VERSION=0.1.0
+
+main: cmd/main/main.go
+	# go build cmd/main/main.go
+	env CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build cmd/main/main.go
+
+# Build application 
+build: main
+
+# Build docker image
+build-docker: build
+	@echo "Deploy to dockerhub"
+	cp main docker/main
+	cd docker; docker build -t lfmunoz4/cobweb:${COBWEB_VERSION} .
+
+# Upload to dockerhub
+# docker pull golang:1.15.5
+# docker run -it --rm golang:1.15.5 /bin/bash
+deploy: build-docker
+	docker push lfmunoz4/cobweb:${COBWEB_VERSION}
+
+clean:
+	-docker image rm lfmunoz4/cobweb:${COBWEB_VERSION}
+	-rm main
+	-rm docker/main
+
+docker:
+	docker run -it --rm lfmunoz4/cobweb:${COBWEB_VERSION} 
+
+# ________________________________________________________________________________
 # INFO
 # ________________________________________________________________________________
 .PHONY: info
