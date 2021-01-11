@@ -1,0 +1,225 @@
+<!doctype html>
+
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+
+    <title>Cobweb Control Plane</title>
+    <meta name="description" content="cobweb control plane homepage">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+    <!-- START OF APP -->
+    <div id="app">
+
+        <x-nav></x-nav>
+
+        <div class="main">
+
+            <button @click="getInstances()">Get Instances</button>
+
+            <div class="config">
+                <h3>Configuration</h3>
+
+
+
+            <div>
+                <a @click="toggleConfigTextArea"
+                    style="margin-left: 40px; font-size: .8rem; text-decoration: underline; color: blue;">
+                    [show import: {{configTextAreaShow}} ]
+                </a>
+                <div v-if="configTextAreaShow">
+                    <textarea rows="30" cols="100" v-model="configTextArea"></textarea>
+                    <div>
+                        <button @click="configTextArea=''">Clear</button>
+                        <button @click="">Import</button>
+                    </div>
+                </div>
+
+            </div>
+
+
+
+            </div>
+
+
+            <div class="discovery">
+                <h3>Service Discovery</h3>
+
+                <div v-for="(item,i) in instances" :key="i">
+                    <x-instance v-model="instances[i]" @save="saveInstance"> </x-instance>
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- END OF APP -->
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.min.js"
+        integrity="sha256-4iQZ6BVL4qNKlQ27TExEhBN1HFPvAvAMbFavKKosSWQ=" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.19.2/axios.min.js"
+        integrity="sha256-T/f7Sju1ZfNNfBh7skWn0idlCBcI3RwdLSS4/I7NQKQ=" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.6.11/vue.js" type="text/javascript"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vue2-filters/dist/vue2-filters.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.2.4/gsap.min.js"></script>
+
+    <script src="js/xModifiable.js"></script>
+    <script src="js/xNav.js"></script>
+    <script src="js/xInstance.js"></script>
+
+
+    
+
+    <script>
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Configuration and Constants
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+        //const API_URL = 'http://localhost:8085/api';
+        const API_URL = 'api';
+
+        function isObject(obj) {
+            if( typeof obj === 'object' && obj !== null) return true
+            return false
+        }
+        function castObjectFieldsToString(obj) {
+            let result = {}
+            for (const [key, value] of Object.entries(obj)) {
+                if(isObject(value)) {
+                    result[key] = castObjectFieldsToString(value)
+                } else {
+                    result[key] = String(value)
+                }
+            }
+            return result
+        }
+
+        function castFieldsToString(arr) {
+            return arr.map( item => {
+                return castObjectFieldsToString(item)
+            })
+        }
+
+        function castInstanceStringToInstanceNumbers(obj) {
+            return {
+                Address: obj.Address,
+                Id: parseInt(obj.Id),
+                Local: {
+                    Name: obj.Local.Name,
+                    Port: parseInt(obj.Local.Port),
+                    Address: obj.Local.Address
+                },
+                Remote: {
+                    Name: obj.Remote.Name,
+                    Port: parseInt(obj.Remote.Port),
+                    Address: obj.Remote.Address
+                },
+                NodeId: obj.NodeId,
+                Version: parseInt(obj.Version)
+            }
+        }
+
+        function getObj(path) {
+            return axios({
+                method: 'get',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                url: `${API_URL}/${path}`
+            })
+        }
+
+        function postInstanceConfig(postObj) {
+            const obj = castInstanceStringToInstanceNumbers(postObj)
+            return axios({
+                method: 'post',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                url: `${API_URL}/saveInstance`,
+                data: obj
+            })
+        }
+
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Vuejs Main
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        Vue.config.productionTip = false
+        new Vue({
+            el: '#app',
+            mixins: [Vue2Filters.mixin],
+            //-----------------------------------------------------------------------------------
+            // Data
+            //-----------------------------------------------------------------------------------
+            data: {
+                configTextAreaShow: false,
+                configTextArea: "",
+
+                // fields must all be string
+                instances: []
+            },
+            //-----------------------------------------------------------------------------------
+            // Methods
+            //-----------------------------------------------------------------------------------
+            methods: {
+                //-----------------------------------------------------------------------------------
+                // API
+                //-----------------------------------------------------------------------------------
+                async getInstances() {
+                    const resp = await getObj("instance")
+                    console.log("instance", resp.data)
+                    this.instances = []
+                    Vue.nextTick( () =>  {
+                    const arr = castFieldsToString(resp.data)
+                        for(let i = 0; i < arr.length; i++) {
+                            Vue.set(this.instances, i, arr[i])
+                        }
+                    })
+                },
+
+                async getProxies() {
+                    const resp = await getObj("proxy")
+                    console.log("proxy", resp.data)
+                },
+
+                async saveInstance(obj) {
+                    postInstanceConfig(obj)
+                    this.getInstances()
+                },
+
+                //-----------------------------------------------------------------------------------
+                // HELPER METHODS
+                //-----------------------------------------------------------------------------------
+                toggleConfigTextArea() {
+                    this.configTextAreaShow = !this.configTextAreaShow
+                },
+            },
+            //-----------------------------------------------------------------------------------
+            // COMPUTED
+            //-----------------------------------------------------------------------------------
+            watch: {
+
+            },
+            //-----------------------------------------------------------------------------------
+            // COMPUTED
+            //-----------------------------------------------------------------------------------
+            computed: {
+
+            },
+            //-----------------------------------------------------------------------------------
+            // MOUNTED
+            //-----------------------------------------------------------------------------------
+            mounted() {
+                this.getInstances()
+            }
+        });
+
+    </script>
+
+</body>
+
+</html>

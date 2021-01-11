@@ -6,6 +6,8 @@ ENV GO111MODULE=on
 
 WORKDIR /root
 
+ADD web /go/bin/web
+ADD conf.json /go/bin/conf.json
 ADD main /go/bin/main
 RUN chmod +x /go/bin/main
 

@@ -32,6 +32,7 @@ build: main
 build-docker: build
 	@echo "Deploy to dockerhub"
 	cp main docker/main
+	cp web -r docker/web
 	cd docker; docker build -t lfmunoz4/cobweb:${COBWEB_VERSION} .
 
 # Upload to dockerhub
@@ -44,9 +45,11 @@ clean:
 	-docker image rm lfmunoz4/cobweb:${COBWEB_VERSION}
 	-rm main
 	-rm docker/main
+	-rm -rf docker/web
 
 docker:
-	docker run -it --rm lfmunoz4/cobweb:${COBWEB_VERSION} 
+	#docker run -it --rm lfmunoz4/cobweb:${COBWEB_VERSION} 
+	docker run -it --rm --network=host lfmunoz4/cobweb:${COBWEB_VERSION} 
 
 # ________________________________________________________________________________
 # INFO

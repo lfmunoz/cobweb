@@ -149,8 +149,9 @@ func getProxies(w http.ResponseWriter, req *http.Request) {
 // ________________________________________________________________________________
 // ENTRY
 // ________________________________________________________________________________
-func Start() {
-	log.WithFields(log.Fields{"port": httpPort}).Info("[HTTP] - http listening ")
+func Start(appConfig config.AppConfig) {
+	listenBinding := fmt.Sprintf(":%d", appConfig.HttpPort)
+	log.WithFields(log.Fields{"addr": listenBinding}).Info("[HTTP] - http listening ")
 	// INSTANCE
 	http.HandleFunc("/api/instance", getInstances)
 	http.HandleFunc("/api/saveInstance", saveInstance)
@@ -159,9 +160,9 @@ func Start() {
 	http.HandleFunc("/api/proxy", getProxies)
 
 	// http://localhost:8090/ will server index.html
-	http.Handle("/", http.FileServer(http.Dir("./web")))
+	http.Handle("/", http.FileServer(http.Dir(appConfig.HttpDir)))
 
 	//  nil tells it to use the default router
-	http.ListenAndServe(httpPort, nil)
+	http.ListenAndServe(listenBinding, nil)
 
 }

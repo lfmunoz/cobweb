@@ -1,0 +1,5 @@
+{
+    "httpPort": 8090,
+    "gRpcPort": 18000,
+    "httpDir": "./web"
+}

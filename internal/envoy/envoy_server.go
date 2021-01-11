@@ -39,7 +39,7 @@ var tempConnectionMap sync.Map
 const grpcMaxConcurrentStreams = 1000
 
 var (
-	port uint = 18000
+	// port uint = 18000
 
 	debug       bool
 	onlyLogging bool
@@ -174,7 +174,7 @@ func RunManagementServer(ctx context.Context, server serverv3.Server, port uint)
 	grpcServer.GracefulStop()
 }
 
-func Start() {
+func Start(appConfig config.AppConfig) {
 
 	// A Context carries a deadline, cancelation signal, and request-scoped values
 	// 	across API boundaries.
@@ -194,7 +194,7 @@ func Start() {
 	srv := serverv3.NewServer(ctx, cb.Cache, cb)
 
 	// start the xDS server
-	go RunManagementServer(ctx, srv, port)
+	go RunManagementServer(ctx, srv, appConfig.GrpcPort)
 
 	<-signal
 }

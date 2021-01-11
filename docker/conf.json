@@ -1,0 +1,5 @@
+{
+    "HttpDir": "/go/bin/web",
+    "HttpPort": 8080,
+    "GrpcPort": 8081
+}
