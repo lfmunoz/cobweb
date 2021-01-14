@@ -78,23 +78,24 @@ func (cb *Callbacks) OnStreamClosed(id int64) {
 
 func (cb *Callbacks) OnStreamRequest(id int64, r *discoverygrpc.DiscoveryRequest) error {
 	// update connection
-	log.Infof("[Envoy]-[OnStreamRequest - %d]", id)
-	result, ok := connections.Load(id)
+	connectionResult, ok := connections.Load(id)
 	if !ok {
 		log.Errorf("[Envoy]-[OnStreamRequest - %d] - connection not found", id)
 	}
-	connection := result.(Connection)
+	connection := connectionResult.(Connection)
 	connection.NodeId = r.Node.Id
 	connections.Store(id, connection)
+	log.Infof("[Envoy]-[OnStreamRequest - %d] - nodeId=%s addr=%s",
+		id, connection.NodeId, connection.Addr)
 
 	// update instance
 	var inst instance.Instance
-	result, ok = instance.LoadByNodeId(connection.NodeId)
+	result, ok := instance.LoadByNodeId(connection.NodeId)
 	if !ok {
-		inst = *instance.BuildDefault(connection.ConnectionId, connection.Addr)
+		inst = instance.BuildDefault(connection.ConnectionId, connection.Addr)
 		inst.NodeId = connection.NodeId
 	} else {
-		inst = result.(instance.Instance)
+		inst = *result
 		inst.Id = connection.ConnectionId
 		inst.Address = connection.Addr
 		inst.NodeId = connection.NodeId

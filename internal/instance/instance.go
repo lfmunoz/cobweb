@@ -129,8 +129,8 @@ func DeleteById(id int64) {
 	})
 }
 
-func BuildDefault(id int64, addr string) *Instance {
-	return &Instance{
+func BuildDefault(id int64, addr string) Instance {
+	return Instance{
 		Id:      id,
 		NodeId:  "",
 		Address: addr,
