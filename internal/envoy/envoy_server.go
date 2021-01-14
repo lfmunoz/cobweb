@@ -92,10 +92,12 @@ func (cb *Callbacks) OnStreamRequest(id int64, r *discoverygrpc.DiscoveryRequest
 	result, ok = instance.LoadByNodeId(connection.NodeId)
 	if !ok {
 		inst = *instance.BuildDefault(connection.ConnectionId, connection.Addr)
+		inst.NodeId = connection.NodeId
 	} else {
 		inst = result.(instance.Instance)
 		inst.Id = connection.ConnectionId
 		inst.Address = connection.Addr
+		inst.NodeId = connection.NodeId
 	}
 	instance.Save(inst)
 	log.Infof("[Envoy]-[Sending Config] - %+v", inst)
