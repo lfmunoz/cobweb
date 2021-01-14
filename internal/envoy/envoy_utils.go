@@ -1,10 +1,11 @@
-package config
+package envoy
 
 import (
 	"time"
 
 	// LOGGING
 	"github.com/golang/protobuf/ptypes"
+	"github.com/lfmunoz/cobweb/internal/instance"
 	log "github.com/sirupsen/logrus"
 
 	// GO CONTROL PLANE
@@ -13,28 +14,23 @@ import (
 	endpoint "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
 	listener "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
 	tcp_proxy "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/tcp_proxy/v3"
+	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
 	"github.com/envoyproxy/go-control-plane/pkg/wellknown"
 )
 
 // ________________________________________________________________________________
-// CONFIGURATION
-// ________________________________________________________________________________
-type Local struct {
-	Name    string
-	Port    uint32
-	Address string
-}
-
-type Remote struct {
-	Name    string
-	Port    uint32
-	Address string
-}
-
-// ________________________________________________________________________________
 // CLUSTER
 // ________________________________________________________________________________
-func BuildClusterResource(remote Remote) *cluster.Cluster {
+func BuildClusterResource(remote []instance.Remote) []types.Resource {
+	var resource = []types.Resource{}
+	for i := 1; i < len(remote); i++ {
+		cluster := BuildCluster(remote[i])
+		resource = append(resource, cluster)
+	}
+	return resource
+}
+
+func BuildCluster(remote instance.Remote) *cluster.Cluster {
 
 	hst := &core.Address{Address: &core.Address_SocketAddress{
 		SocketAddress: &core.SocketAddress{
@@ -73,7 +69,17 @@ func BuildClusterResource(remote Remote) *cluster.Cluster {
 // ________________________________________________________________________________
 // LISTENER
 // ________________________________________________________________________________
-func BuildListenerResource(lis Local, cluster Remote) *listener.Listener {
+func BuildListenerResource(lis []instance.Local, cluster []instance.Remote) []types.Resource {
+	var listeners = []types.Resource{}
+	for i := 1; i < len(lis); i++ {
+		resource := BuildListener(lis[i], cluster[i])
+		listeners = append(listeners, resource)
+	}
+	return listeners
+
+}
+
+func BuildListener(lis instance.Local, cluster instance.Remote) *listener.Listener {
 
 	log.Infof("[Creating listener] - %s", lis.Name)
 

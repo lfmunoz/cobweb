@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	discoverygrpc "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
-	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
 	cachev3 "github.com/envoyproxy/go-control-plane/pkg/cache/v3"
 	serverv3 "github.com/envoyproxy/go-control-plane/pkg/server/v3"
 	"github.com/lfmunoz/cobweb/internal/config"
@@ -31,16 +30,12 @@ type Callbacks struct {
 	Cache    cachev3.SnapshotCache
 }
 
-var tempConnectionMap sync.Map
-
 // ________________________________________________________________________________
 // CONFIG
 // ________________________________________________________________________________
 const grpcMaxConcurrentStreams = 1000
 
 var (
-	// port uint = 18000
-
 	debug       bool
 	onlyLogging bool
 	withALS     bool
@@ -65,7 +60,6 @@ func (cb *Callbacks) OnStreamOpen(ctx context.Context, id int64, typ string) err
 	result, ok := instance.LoadById(id)
 	if ok {
 		result.Address = addr
-		// result.Active = true
 		instance.Save(*result)
 	} else {
 		instance.Save(*instance.BuildDefault(id, addr))
@@ -96,26 +90,9 @@ func (cb *Callbacks) OnStreamRequest(id int64, r *discoverygrpc.DiscoveryRequest
 	// log.Infof("OnStreamRequest %v", r.Node.ListeningAddresses)
 	// log.Infof("OnStreamRequest %v", r.ResourceNames)
 
-	var l = []types.Resource{
-		config.BuildListenerResource(result.Local, result.Remote),
-	}
-	var c = []types.Resource{
-		config.BuildClusterResource(result.Remote),
-	}
-
+	l := BuildListenerResource(result.Local, result.Remote)
+	c := BuildClusterResource(result.Remote)
 	instance.SendConfiguration(result, l, c)
-	/*
-		atomic.AddInt32(&result.Version, 1)
-		snap := cachev3.NewSnapshot(fmt.Sprint(result.Version), nil, c, nil, l, nil, nil)
-		if err := snap.Consistent(); err != nil {
-			log.Errorf("snapshot inconsistency: %+v\n%+v", snap, err)
-			os.Exit(1)
-		}
-		err := cb.Cache.SetSnapshot(result.NodeId, snap)
-		if err != nil {
-			log.Fatalf("Could not set snapshot %v", err)
-		}
-	*/
 
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
@@ -187,9 +164,7 @@ func Start(appConfig config.AppConfig) {
 		Fetches:  0,
 		Requests: 0,
 		Cache:    instance.Cache,
-		// Cache:    cachev3.NewSnapshotCache(true, cachev3.IDHash{}, nil),
 	}
-	// cache = cachev3.NewSnapshotCache(true, cachev3.IDHash{}, nil)
 
 	srv := serverv3.NewServer(ctx, cb.Cache, cb)
 

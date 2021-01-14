@@ -20,29 +20,7 @@
 
             <button @click="getInstances()">Get Instances</button>
 
-            <div class="config">
-                <h3>Configuration</h3>
 
-
-
-            <div>
-                <a @click="toggleConfigTextArea"
-                    style="margin-left: 40px; font-size: .8rem; text-decoration: underline; color: blue;">
-                    [show import: {{configTextAreaShow}} ]
-                </a>
-                <div v-if="configTextAreaShow">
-                    <textarea rows="30" cols="100" v-model="configTextArea"></textarea>
-                    <div>
-                        <button @click="configTextArea=''">Clear</button>
-                        <button @click="">Import</button>
-                    </div>
-                </div>
-
-            </div>
-
-
-
-            </div>
 
 
             <div class="discovery">
@@ -52,6 +30,23 @@
                     <x-instance v-model="instances[i]" @save="saveInstance"> </x-instance>
                 </div>
 
+            </div>
+
+            <div class="config">
+                <h3>Important Configuration</h3>
+                <div>
+                    <a @click="toggleConfigTextArea"
+                        style="margin-left: 40px; font-size: .8rem; text-decoration: underline; color: blue;">
+                        [show import: {{configTextAreaShow}} ]
+                    </a>
+                    <div v-if="configTextAreaShow">
+                        <textarea rows="20" cols="100" v-model="configTextArea"></textarea>
+                        <div>
+                            <button @click="configTextArea=''">Clear</button>
+                            <button @click="">Import</button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
         </div>
@@ -72,7 +67,7 @@
     <script src="js/xInstance.js"></script>
 
 
-    
+
 
     <script>
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -83,13 +78,18 @@
         const API_URL = 'api';
 
         function isObject(obj) {
-            if( typeof obj === 'object' && obj !== null) return true
+            if (typeof obj === 'object' && obj !== null) return true
             return false
         }
+
         function castObjectFieldsToString(obj) {
             let result = {}
             for (const [key, value] of Object.entries(obj)) {
-                if(isObject(value)) {
+                if (Array.isArray(value)) {
+                    result[key] = value.map( item => {
+                        return castObjectFieldsToString(item)
+                    })
+                } else if (isObject(value)) {
                     result[key] = castObjectFieldsToString(value)
                 } else {
                     result[key] = String(value)
@@ -99,7 +99,7 @@
         }
 
         function castFieldsToString(arr) {
-            return arr.map( item => {
+            return arr.map(item => {
                 return castObjectFieldsToString(item)
             })
         }
@@ -173,9 +173,9 @@
                     const resp = await getObj("instance")
                     console.log("instance", resp.data)
                     this.instances = []
-                    Vue.nextTick( () =>  {
-                    const arr = castFieldsToString(resp.data)
-                        for(let i = 0; i < arr.length; i++) {
+                    Vue.nextTick(() => {
+                        const arr = castFieldsToString(resp.data)
+                        for (let i = 0; i < arr.length; i++) {
                             Vue.set(this.instances, i, arr[i])
                         }
                     })

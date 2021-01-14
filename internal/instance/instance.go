@@ -7,21 +7,43 @@ import (
 
 	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
 	cachev3 "github.com/envoyproxy/go-control-plane/pkg/cache/v3"
-	"github.com/lfmunoz/cobweb/internal/config"
 
 	// LOGGING
 	log "github.com/sirupsen/logrus"
 )
 
-type Instance struct {
-	Id      int64
-	NodeId  string
+// ________________________________________________________________________________
+// Data Structure
+// ________________________________________________________________________________
+type Local struct {
+	Name    string
+	Port    uint32
 	Address string
-	// ServiceIds []string
-	// Active     bool
-	Version int32
-	Local   config.Local
-	Remote  config.Remote
+}
+
+type Remote struct {
+	Name    string
+	Port    uint32
+	Address string
+}
+
+type Infrastructure struct {
+	name         string
+	private_ip   string
+	public_ip    string
+	dependencies []string
+	local        []Local
+	remote       []Remote
+}
+
+type Instance struct {
+	Id           int64
+	NodeId       string
+	Address      string
+	Version      int32
+	Local        []Local
+	Remote       []Remote
+	dependencies []string
 }
 
 // var concurrentMap map[string]InstanceInfo
@@ -92,16 +114,16 @@ func BuildDefault(id int64, addr string) *Instance {
 		NodeId:  "",
 		Address: addr,
 		Version: 1,
-		Local: config.Local{
-			Name:    "defaultListen",
+		Local: []Local{{
+			Name:    "default-local",
 			Address: "0.0.0.0",
 			Port:    8080,
-		},
-		Remote: config.Remote{
-			Name:    "defaultProxy",
-			Address: "lfmunoz.com",
+		}},
+		Remote: []Remote{{
+			Name:    "default-remote",
+			Address: "apache.org", // nginx.org
 			Port:    80,
-		},
+		}},
 	}
 }
 
