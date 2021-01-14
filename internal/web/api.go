@@ -18,6 +18,7 @@ import (
 // INSTANCE
 // ________________________________________________________________________________
 func getInstances(w http.ResponseWriter, req *http.Request) {
+	log.Infof("[HTTP] - get instances")
 	instances := instance.All()
 	w.Header().Set("Content-Type", "application/json")
 	b, err := json.Marshal(instances)
@@ -30,6 +31,7 @@ func getInstances(w http.ResponseWriter, req *http.Request) {
 }
 
 func saveInstance(w http.ResponseWriter, r *http.Request) {
+	log.Infof("[HTTP] - save instance ")
 	var obj instance.Instance
 	err := decodeJSONBody(w, r, &obj)
 	if err != nil {
@@ -43,7 +45,11 @@ func saveInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	before, _ := instance.LoadById(obj.Id)
+	before, ok := instance.LoadByNodeId(obj.NodeId)
+	if !ok {
+		log.Errorf("[HTTP] - could not find: %s ", obj.NodeId)
+		return
+	}
 	obj.Version = before.Version + 1
 	log.Infof("[HTTP] - Before: %v ", before)
 	log.Infof("[HTTP] - After: %v ", obj)
@@ -53,36 +59,36 @@ func saveInstance(w http.ResponseWriter, r *http.Request) {
 	instance.Save(obj)
 }
 
-func importInfrastructure(w http.ResponseWriter, r *http.Request) {
-	var obj []instance.Infrastructure
-	err := decodeJSONBody(w, r, &obj)
+func importInstances(w http.ResponseWriter, r *http.Request) {
+	log.Infof("[HTTP] - import infrastructure")
+	var objs []instance.Instance
+	err := decodeJSONBody(w, r, &objs)
 	if err != nil {
 		var mr *malformedRequest
 		if errors.As(err, &mr) {
 			http.Error(w, mr.msg, mr.status)
 		} else {
-			log.Println(err.Error())
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		}
+		log.Println(err.Error())
 		return
 	}
 
-	log.Infof("[INFRA] - %v ", obj)
-
-	/*
-		before, _ := instance.LoadById(obj.Id)
-		obj.Version = before.Version + 1
-		log.Infof("[HTTP] - Before: %v ", before)
-		log.Infof("[HTTP] - After: %v ", obj)
-		var l = []types.Resource{
-			config.BuildListenerResource(obj.Local, obj.Remote),
+	log.Infof("[HTTP] - [IMPORTING]: %+v ", objs)
+	for _, obj := range objs {
+		before, ok := instance.LoadByNodeId(obj.NodeId)
+		if ok {
+			obj.Version = before.Version + 1
+			log.Infof("[HTTP] - Before: %v ", before)
+			log.Infof("[HTTP] - After: %v ", obj)
+		} else {
+			log.Infof("[HTTP] - New: %v ", obj)
 		}
-		var c = []types.Resource{
-			config.BuildClusterResource(obj.Remote),
-		}
+		var l = envoy.BuildListenerResource(obj.Local, obj.Remote)
+		var c = envoy.BuildClusterResource(obj.Remote)
 		instance.SendConfiguration(&obj, l, c)
 		instance.Save(obj)
-	*/
+	}
 }
 
 // ________________________________________________________________________________
@@ -94,7 +100,7 @@ func Start(appConfig config.AppConfig) {
 	// INSTANCE
 	http.HandleFunc("/api/instance", getInstances)
 	http.HandleFunc("/api/saveInstance", saveInstance)
-	http.HandleFunc("/api/importInfra", saveInstance)
+	http.HandleFunc("/api/importInstances", importInstances)
 
 	// http://localhost:8090/ will server index.html
 	http.Handle("/", http.FileServer(http.Dir(appConfig.HttpDir)))

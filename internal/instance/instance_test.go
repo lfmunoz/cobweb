@@ -1,6 +1,7 @@
 package instance
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/lfmunoz/cobweb/test"
@@ -9,9 +10,9 @@ import (
 func TestConcurrentMap_Simple(t *testing.T) {
 
 	instances := []Instance{
-		{1, "nodeId0", "192.168.0.0", make([]string, 0), false},
-		{2, "nodeId1", "192.168.0.1", make([]string, 0), false},
-		{3, "nodeId2", "192.168.0.2", make([]string, 0), false},
+		{Id: 1, NodeId: "nodeId0", Address: "192.168.0.0"},
+		{Id: 2, NodeId: "nodeId1", Address: "192.168.0.1"},
+		{Id: 3, NodeId: "nodeId2", Address: "192.168.0.2"},
 	}
 
 	t.Log("ConcurrentMap should work.")
@@ -45,7 +46,7 @@ func TestConcurrentMap_Simple(t *testing.T) {
 		}
 		t.Logf("\t [DeleteById] ")
 		{
-			Delete(instances[0].Id)
+			DeleteById(instances[0].Id)
 			t.Log("\t\t Delete should work", test.CheckMark)
 		}
 		t.Logf("\t [Read All] ")
@@ -58,6 +59,37 @@ func TestConcurrentMap_Simple(t *testing.T) {
 				t.Log("\t\t Reading all should work", test.CheckMark)
 
 			}
+		}
+	}
+}
+
+func TestSerializeDeserialize(t *testing.T) {
+	// t.Skip()
+	t.Log("Serialize and Deserialize should work.")
+	{
+		t.Logf("\t [Deserialize Single] ")
+		{
+			instance1 := []byte(`{"dependencies":[],"local":[{"address":"0.0.0.0","name":"nginx_local","port":8080}],"name":"web0_0","private_ip":"172.17.0.4","public_ip":"172.17.0.4","remote":[{"address":"localhost","name":"nginx_remote","port":80}]}`)
+			var m Infrastructure
+			err := json.Unmarshal(instance1, &m)
+			if err != nil && m.Name != "web_0" {
+				t.Error("\t\t Deserialize failed", err, test.BallotX)
+			} else {
+				t.Log("\t\t Deserialize works", test.CheckMark)
+			}
+		}
+		t.Logf("\t [Deserialize Array] ")
+		{
+			cluster := []byte(`[{"dependencies":[],"gateway":"172.17.0.1","local":[{"address":"0.0.0.0","name":"nginx_local","port":8080}],"name":"web0_0","private_ip":"172.17.0.4","public_ip":"172.17.0.4","remote":[{"address":"localhost","name":"nginx_remote","port":80}],"scripts":["start_envoy","docker/nginx"]},{"dependencies":[],"gateway":"172.17.0.1","local":[{"address":"0.0.0.0","name":"nginx_local","port":8080}],"name":"web1_0","private_ip":"172.17.0.5","public_ip":"172.17.0.5","remote":[{"address":"localhost","name":"nginx_remote","port":80}],"scripts":["start_envoy","docker/nginx"]},{"dependencies":[],"gateway":"172.17.0.1","local":[{"address":"0.0.0.0","name":"nginx_local","port":8080}],"name":"web1_1","private_ip":"172.17.0.3","public_ip":"172.17.0.3","remote":[{"address":"localhost","name":"nginx_remote","port":80}],"scripts":["start_envoy","docker/nginx"]}]`)
+			var m []Infrastructure
+			err := json.Unmarshal(cluster, &m)
+			if err != nil && m[0].Name != "web_0" {
+				t.Error("\t\t Deserialize failed", err, test.BallotX)
+			} else {
+
+				t.Log("\t\t Deserialize works", test.CheckMark)
+			}
+
 		}
 	}
 }

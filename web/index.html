@@ -20,11 +20,8 @@
 
             <button @click="getInstances()">Get Instances</button>
 
-
-
-
             <div class="discovery">
-                <h3>Service Discovery</h3>
+                <h3>Envoy Cluster</h3>
 
                 <div v-for="(item,i) in instances" :key="i">
                     <x-instance v-model="instances[i]" @save="saveInstance"> </x-instance>
@@ -42,8 +39,8 @@
                     <div v-if="configTextAreaShow">
                         <textarea rows="20" cols="100" v-model="configTextArea"></textarea>
                         <div>
+                            <button @click="importInstances">Import</button>
                             <button @click="configTextArea=''">Clear</button>
-                            <button @click="">Import</button>
                         </div>
                     </div>
                 </div>
@@ -104,22 +101,43 @@
             })
         }
 
+        /** 
+        Needed because HTML input boxes are always strings 
+        TODO: xModifiable needs to support different types
+                right now it is always string
+         **/
         function castInstanceStringToInstanceNumbers(obj) {
             return {
                 Address: obj.Address,
                 Id: parseInt(obj.Id),
-                Local: {
-                    Name: obj.Local.Name,
-                    Port: parseInt(obj.Local.Port),
-                    Address: obj.Local.Address
-                },
-                Remote: {
-                    Name: obj.Remote.Name,
-                    Port: parseInt(obj.Remote.Port),
-                    Address: obj.Remote.Address
-                },
+                Local: obj.Local.map( item => {
+                    return {
+                        Name: item.Name,
+                        Port: parseInt(item.Port),
+                        Address: item.Address
+                    }
+                }),
+                Remote: obj.Remote.map( item => {
+                    return {
+                        Name: item.Name,
+                        Port: parseInt(item.Port),
+                        Address: item.Address
+                    }
+                }),
                 NodeId: obj.NodeId,
                 Version: parseInt(obj.Version)
+            }
+        }
+
+        function convertInfrastructureToInstance(obj) {
+            return {
+                Address: obj.public_ip,
+                Id: -1,
+                Local: obj.local,
+                Remote: obj.remote,
+                NodeId: obj.name,
+                Version: 1,
+                dependencies: obj.dependencies
             }
         }
 
@@ -134,7 +152,9 @@
         }
 
         function postInstanceConfig(postObj) {
+            console.log("postObj", postObj)
             const obj = castInstanceStringToInstanceNumbers(postObj)
+            console.log("post", obj)
             return axios({
                 method: 'post',
                 headers: {
@@ -142,6 +162,17 @@
                 },
                 url: `${API_URL}/saveInstance`,
                 data: obj
+            })
+        }
+
+        function importInstanceConfig(postObj) {
+            return axios({
+                method: 'post',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                url: `${API_URL}/importInstances`,
+                data: postObj
             })
         }
 
@@ -181,9 +212,15 @@
                     })
                 },
 
-                async getProxies() {
-                    const resp = await getObj("proxy")
-                    console.log("proxy", resp.data)
+                async importInstances() {
+                    let obj = JSON.parse(this.configTextArea)
+                    console.log(obj)
+                    let instances = obj.map( item => {
+                        return convertInfrastructureToInstance(item)
+                    })
+                    console.log(instances)
+                    const resp = await importInstanceConfig(instances)
+                    console.log(resp.data)
                 },
 
                 async saveInstance(obj) {

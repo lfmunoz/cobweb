@@ -42,7 +42,14 @@ var (
 	mode        string
 	version     int32
 	cache       cachev3.SnapshotCache
+	connections sync.Map
 )
+
+type Connection struct {
+	Addr         string
+	NodeId       string
+	ConnectionId int64
+}
 
 // ________________________________________________________________________________
 // callback handlers
@@ -57,13 +64,8 @@ func (cb *Callbacks) OnStreamOpen(ctx context.Context, id int64, typ string) err
 	p, _ := peer.FromContext(ctx)
 	addr := p.Addr.String()
 
-	result, ok := instance.LoadById(id)
-	if ok {
-		result.Address = addr
-		instance.Save(*result)
-	} else {
-		instance.Save(*instance.BuildDefault(id, addr))
-	}
+	connection := Connection{addr, "", id}
+	connections.Store(id, connection)
 
 	log.Infof("[Envoy]-[OnStreamOpen - %d] - typ=%s addr=%s", id, typ, addr)
 	return nil
@@ -71,28 +73,35 @@ func (cb *Callbacks) OnStreamOpen(ctx context.Context, id int64, typ string) err
 
 func (cb *Callbacks) OnStreamClosed(id int64) {
 	log.Infof("[Envoy]-[OnStreamClosed - %d] - closed", id)
-	instance.DeleteById(id)
+	connections.Delete(id)
 }
 
 func (cb *Callbacks) OnStreamRequest(id int64, r *discoverygrpc.DiscoveryRequest) error {
-	result, ok := instance.LoadById(id)
+	// update connection
+	log.Infof("[Envoy]-[OnStreamRequest - %d]", id)
+	result, ok := connections.Load(id)
 	if !ok {
-		log.Errorf("[Envoy]-[OnStreamRequest - %d] - item not found", id)
-	} else {
-		result.NodeId = r.Node.Id
-		instance.Save(*result)
+		log.Errorf("[Envoy]-[OnStreamRequest - %d] - connection not found", id)
 	}
-	log.Infof("[Envoy]-[OnStreamRequest - %d] - nodeId=%v addr=%s cluster=%s",
-		id, r.Node.Id, result.Address, r.Node.Cluster)
-	// log.Infof("[Envoy] - OnStreamRequest %v", r.TypeUrl)
-	// log.Infof("OnStreamRequest %v", r.Node.Id)
-	// log.Infof("OnStreamRequest %v", r.Node.Cluster)
-	// log.Infof("OnStreamRequest %v", r.Node.ListeningAddresses)
-	// log.Infof("OnStreamRequest %v", r.ResourceNames)
+	connection := result.(Connection)
+	connection.NodeId = r.Node.Id
+	connections.Store(id, connection)
 
-	l := BuildListenerResource(result.Local, result.Remote)
-	c := BuildClusterResource(result.Remote)
-	instance.SendConfiguration(result, l, c)
+	// update instance
+	var inst instance.Instance
+	result, ok = instance.LoadByNodeId(connection.NodeId)
+	if !ok {
+		inst = *instance.BuildDefault(connection.ConnectionId, connection.Addr)
+	} else {
+		inst = result.(instance.Instance)
+		inst.Id = connection.ConnectionId
+		inst.Address = connection.Addr
+	}
+	instance.Save(inst)
+	log.Infof("[Envoy]-[Sending Config] - %+v", inst)
+	l := BuildListenerResource(inst.Local, inst.Remote)
+	c := BuildClusterResource(inst.Remote)
+	instance.SendConfiguration(&inst, l, c)
 
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
@@ -103,6 +112,7 @@ func (cb *Callbacks) OnStreamRequest(id int64, r *discoverygrpc.DiscoveryRequest
 	}
 	return nil
 }
+
 func (cb *Callbacks) OnStreamResponse(int64, *discoverygrpc.DiscoveryRequest, *discoverygrpc.DiscoveryResponse) {
 	log.Infof("[Envoy] - OnStreamResponse...")
 	cb.Report()

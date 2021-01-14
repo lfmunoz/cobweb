@@ -27,14 +27,18 @@ type Remote struct {
 	Address string
 }
 
+/*
 type Infrastructure struct {
-	name         string
-	private_ip   string
-	public_ip    string
-	dependencies []string
-	local        []Local
-	remote       []Remote
+	Name         string
+	Private_ip   string
+	Public_ip    string
+	Gateway      string
+	Scripts      []string
+	Dependencies []string
+	Local        []Local
+	Remote       []Remote
 }
+*/
 
 type Instance struct {
 	Id           int64
@@ -43,7 +47,7 @@ type Instance struct {
 	Version      int32
 	Local        []Local
 	Remote       []Remote
-	dependencies []string
+	Dependencies []string
 }
 
 // var concurrentMap map[string]InstanceInfo
@@ -52,6 +56,10 @@ type Instance struct {
 var ConcurrentMap sync.Map
 
 var Cache cachev3.SnapshotCache = cachev3.NewSnapshotCache(true, cachev3.IDHash{}, nil)
+
+func DtoToEntity() {
+
+}
 
 // ________________________________________________________________________________
 // Instance endpoints
@@ -75,7 +83,7 @@ func All() []Instance {
 }
 
 func Save(inst Instance) {
-	ConcurrentMap.Store(inst.Id, inst)
+	ConcurrentMap.Store(inst.NodeId, inst)
 }
 
 func LoadById(id int64) (*Instance, bool) {
@@ -104,8 +112,21 @@ func LoadByNodeId(nodeId string) (*Instance, bool) {
 	return &inst, found
 }
 
+func DeleteByNodeId(nodeId string) {
+	ConcurrentMap.Delete(nodeId)
+}
+
 func DeleteById(id int64) {
-	ConcurrentMap.Delete(id)
+	var inst Instance
+	ConcurrentMap.Range(func(key, value interface{}) bool {
+		inst = value.(Instance)
+		if inst.Id == id {
+			ConcurrentMap.Delete(inst.NodeId)
+			return false
+		} else {
+			return true
+		}
+	})
 }
 
 func BuildDefault(id int64, addr string) *Instance {
