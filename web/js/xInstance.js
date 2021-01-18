@@ -61,12 +61,12 @@ Vue.component('xInstance', {
         add() {
           console.log("add")
           this.instance.Local.push({
-            Name: "local_new",
+            Name: "local_new" + Math.floor(Math.random() * 1000),
             Port: "2000",
             Address: "0.0.0.0",
           })
           this.instance.Remote.push({
-            Name: "remote_new",
+            Name: "remote_new" + Math.floor(Math.random() * 1000),
             Port: "80",
             Address: "apache.org",
           })

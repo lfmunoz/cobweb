@@ -30,6 +30,15 @@ func BuildClusterResource(remote []instance.Remote) []types.Resource {
 	return resource
 }
 
+func BuildClusters(remote []instance.Remote) []cluster.Cluster {
+	var clusters = []cluster.Cluster{}
+	for i := 1; i < len(remote); i++ {
+		item := BuildCluster(remote[i])
+		clusters = append(clusters, *item)
+	}
+	return clusters
+}
+
 func BuildCluster(remote instance.Remote) *cluster.Cluster {
 
 	hst := &core.Address{Address: &core.Address_SocketAddress{
@@ -72,15 +81,24 @@ func BuildCluster(remote instance.Remote) *cluster.Cluster {
 func BuildListenerResource(lis []instance.Local, cluster []instance.Remote) []types.Resource {
 	var listeners = []types.Resource{}
 	for i := 1; i < len(lis); i++ {
-		resource := BuildListener(lis[i], cluster[i])
-		listeners = append(listeners, resource)
+		item := BuildListener(lis[i], cluster[i])
+		listeners = append(listeners, item)
 	}
 	return listeners
+}
 
+func BuildListeners(lis []instance.Local, cluster []instance.Remote) []listener.Listener {
+	var listeners = []listener.Listener{}
+	for i := 1; i < len(lis); i++ {
+		item := BuildListener(lis[i], cluster[i])
+		listeners = append(listeners, *item)
+	}
+	return listeners
 }
 
 func BuildListener(lis instance.Local, cluster instance.Remote) *listener.Listener {
 
+	// must be a unique name
 	log.Infof("[Creating listener] - %s", lis.Name)
 
 	// https://github.com/envoyproxy/go-control-plane/blob/master/envoy/extensions/filters/network/tcp_proxy/v3/tcp_proxy.pb.go

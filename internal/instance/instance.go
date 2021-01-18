@@ -148,8 +148,8 @@ func BuildDefault(id int64, addr string) Instance {
 	}
 }
 
-func SendConfiguration(inst *Instance, l []types.Resource, c []types.Resource) {
-	snap := cachev3.NewSnapshot(fmt.Sprint(inst.Version), nil, c, nil, l, nil, nil)
+func SendConfiguration(inst *Instance, listeners []types.Resource, clusters []types.Resource) {
+	snap := cachev3.NewSnapshot(fmt.Sprint(inst.Version), nil, clusters, nil, listeners, nil, nil)
 	if err := snap.Consistent(); err != nil {
 		log.Errorf("snapshot inconsistency: %+v\n%+v", snap, err)
 		os.Exit(1)

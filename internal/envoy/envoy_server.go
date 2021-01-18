@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	discoverygrpc "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
+	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
 	cachev3 "github.com/envoyproxy/go-control-plane/pkg/cache/v3"
 	serverv3 "github.com/envoyproxy/go-control-plane/pkg/server/v3"
 	"github.com/lfmunoz/cobweb/internal/config"
@@ -89,22 +90,29 @@ func (cb *Callbacks) OnStreamRequest(id int64, r *discoverygrpc.DiscoveryRequest
 		id, connection.NodeId, connection.Addr)
 
 	// update instance
-	var inst instance.Instance
+	var obj instance.Instance
 	result, ok := instance.LoadByNodeId(connection.NodeId)
 	if !ok {
-		inst = instance.BuildDefault(connection.ConnectionId, connection.Addr)
-		inst.NodeId = connection.NodeId
+		obj = instance.BuildDefault(connection.ConnectionId, connection.Addr)
+		obj.NodeId = connection.NodeId
 	} else {
-		inst = *result
-		inst.Id = connection.ConnectionId
-		inst.Address = connection.Addr
-		inst.NodeId = connection.NodeId
+		obj = *result
+		obj.Id = connection.ConnectionId
+		obj.Address = connection.Addr
+		obj.NodeId = connection.NodeId
 	}
-	instance.Save(inst)
-	log.Infof("[Envoy]-[Sending Config] - %+v", inst)
-	l := BuildListenerResource(inst.Local, inst.Remote)
-	c := BuildClusterResource(inst.Remote)
-	instance.SendConfiguration(&inst, l, c)
+	instance.Save(obj)
+	log.Infof("[Envoy]-[Sending Config] - %+v", obj)
+
+	listenerResource := []types.Resource{}
+	clusterResource := []types.Resource{}
+	for i := 0; i < len(obj.Local); i++ {
+		l := BuildListener(obj.Local[i], obj.Remote[i])
+		c := BuildCluster(obj.Remote[i])
+		listenerResource = append(listenerResource, l)
+		clusterResource = append(clusterResource, c)
+	}
+	instance.SendConfiguration(&obj, listenerResource, clusterResource)
 
 	cb.mu.Lock()
 	defer cb.mu.Unlock()

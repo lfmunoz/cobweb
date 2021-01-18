@@ -8,6 +8,7 @@ import (
 
 	// LOGGING
 
+	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
 	"github.com/lfmunoz/cobweb/internal/config"
 	"github.com/lfmunoz/cobweb/internal/envoy"
 	"github.com/lfmunoz/cobweb/internal/instance"
@@ -53,9 +54,17 @@ func saveInstance(w http.ResponseWriter, r *http.Request) {
 	obj.Version = before.Version + 1
 	log.Infof("[HTTP] - Before: %v ", before)
 	log.Infof("[HTTP] - After: %v ", obj)
-	var l = envoy.BuildListenerResource(obj.Local, obj.Remote)
-	var c = envoy.BuildClusterResource(obj.Remote)
-	instance.SendConfiguration(&obj, l, c)
+
+	listenerResource := []types.Resource{}
+	clusterResource := []types.Resource{}
+	for i := 0; i < len(obj.Local); i++ {
+		l := envoy.BuildListener(obj.Local[i], obj.Remote[i])
+		c := envoy.BuildCluster(obj.Remote[i])
+		listenerResource = append(listenerResource, l)
+		clusterResource = append(clusterResource, c)
+	}
+	instance.SendConfiguration(&obj, listenerResource, clusterResource)
+
 	instance.Save(obj)
 }
 
