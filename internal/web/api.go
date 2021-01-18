@@ -100,6 +100,57 @@ func importInstances(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func infraToInstances(objs []instance.Infrastructure) []instance.Instance {
+	var insts []instance.Instance
+	for _, obj := range objs {
+		inst := instance.Instance{
+			Address:      obj.Public_ip,
+			Local:        obj.Local,
+			Remote:       obj.Remote,
+			NodeId:       obj.Name,
+			Version:      1,
+			Dependencies: obj.Dependencies,
+		}
+		insts = append(insts, inst)
+
+	}
+	return insts
+}
+
+func importInfra(w http.ResponseWriter, r *http.Request) {
+	log.Infof("[HTTP] - import infrastructure")
+	var objs []instance.Infrastructure
+	err := decodeJSONBody(w, r, &objs)
+	if err != nil {
+		var mr *malformedRequest
+		if errors.As(err, &mr) {
+			http.Error(w, mr.msg, mr.status)
+		} else {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		}
+		log.Println(err.Error())
+		return
+	}
+
+	insts := infraToInstances(objs)
+	log.Infof("[HTTP] - [IMPORTING]: %+v ", objs)
+	for _, obj := range insts {
+		before, ok := instance.LoadByNodeId(obj.NodeId)
+		if ok {
+			obj.Version = before.Version + 1
+			log.Infof("[HTTP] - Before: %v ", before)
+			log.Infof("[HTTP] - After: %v ", obj)
+		} else {
+			log.Infof("[HTTP] - New: %v ", obj)
+		}
+		var l = envoy.BuildListenerResource(obj.Local, obj.Remote)
+		var c = envoy.BuildClusterResource(obj.Remote)
+		instance.SendConfiguration(&obj, l, c)
+		instance.Save(obj)
+	}
+
+}
+
 // ________________________________________________________________________________
 // ENTRY
 // ________________________________________________________________________________
@@ -110,6 +161,7 @@ func Start(appConfig config.AppConfig) {
 	http.HandleFunc("/api/instance", getInstances)
 	http.HandleFunc("/api/saveInstance", saveInstance)
 	http.HandleFunc("/api/importInstances", importInstances)
+	http.HandleFunc("/api/importInfra", importInfra)
 
 	// http://localhost:8090/ will server index.html
 	http.Handle("/", http.FileServer(http.Dir(appConfig.HttpDir)))

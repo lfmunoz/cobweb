@@ -27,18 +27,17 @@ type Remote struct {
 	Address string
 }
 
-/*
 type Infrastructure struct {
 	Name         string
-	Private_ip   string
+	Version      int
 	Public_ip    string
-	Gateway      string
-	Scripts      []string
-	Dependencies []string
+	Private_ip   string
 	Local        []Local
 	Remote       []Remote
+	Scripts      []string
+	Gateway      string
+	Dependencies []string
 }
-*/
 
 type Instance struct {
 	Id           int64
