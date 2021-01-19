@@ -100,9 +100,16 @@ func importInstances(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func infraToInstances(objs []instance.Infrastructure) []instance.Instance {
+func infraToInstances(objs []instance.Infrastructure, ipMap map[string]string) []instance.Instance {
 	var insts []instance.Instance
 	for _, obj := range objs {
+		for _, remote := range obj.Remote {
+			addr, ok := ipMap[remote.Address]
+			if ok {
+				remote.Address = addr
+			}
+		}
+
 		inst := instance.Instance{
 			Address:      obj.Public_ip,
 			Local:        obj.Local,
@@ -119,6 +126,9 @@ func infraToInstances(objs []instance.Infrastructure) []instance.Instance {
 
 func importInfra(w http.ResponseWriter, r *http.Request) {
 	log.Infof("[HTTP] - import infrastructure")
+
+	ipMap := make(map[string]string)
+
 	var objs []instance.Infrastructure
 	err := decodeJSONBody(w, r, &objs)
 	if err != nil {
@@ -132,7 +142,12 @@ func importInfra(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	insts := infraToInstances(objs)
+	for _, inf := range objs {
+		ipMap[inf.Name] = inf.Public_ip
+	}
+
+	insts := infraToInstances(objs, ipMap)
+
 	log.Infof("[HTTP] - [IMPORTING]: %+v ", objs)
 	for _, obj := range insts {
 		before, ok := instance.LoadByNodeId(obj.NodeId)
