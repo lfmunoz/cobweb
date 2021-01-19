@@ -103,10 +103,10 @@ func importInstances(w http.ResponseWriter, r *http.Request) {
 func infraToInstances(objs []instance.Infrastructure, ipMap map[string]string) []instance.Instance {
 	var insts []instance.Instance
 	for _, obj := range objs {
-		for _, remote := range obj.Remote {
+		for i, remote := range obj.Remote {
 			addr, ok := ipMap[remote.Address]
 			if ok {
-				remote.Address = addr
+				obj.Remote[i].Address = addr
 			}
 		}
 
